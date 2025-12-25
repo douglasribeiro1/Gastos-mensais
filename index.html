@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Pro</title>
+    <meta name="theme-color" content="#4f46e5">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/552/552791.png">
+    
+    <!-- Tailwind & Vue CDNs -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', border: '#334155' }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        [v-cloak] { display: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { transition: background-color 0.3s ease, color 0.3s ease; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-dark-bg min-h-screen font-sans text-slate-900 dark:text-slate-100">
+
+<div id="app" v-cloak class="max-w-4xl mx-auto p-4 pb-24">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-8 pt-4">
+        <div>
+            <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Finanças Pro</h1>
+            <div class="flex items-center gap-2 mt-1">
+                <button @click="changeMonth(-1)" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                <span class="text-slate-500 dark:text-slate-400 text-sm font-medium w-36 text-center">
+                    {{ months[currentMonth] }} / {{ currentYear }}
+                </span>
+                <button @click="changeMonth(1)" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+        
+        <div class="flex gap-2">
+            <!-- Theme Toggle -->
+            <button @click="toggleDarkMode" class="p-2 bg-white dark:bg-dark-card border dark:border-dark-border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                <i v-if="isDark" data-lucide="sun" class="w-5 h-5 text-amber-400"></i>
+                <i v-else data-lucide="moon" class="w-5 h-5 text-slate-600"></i>
+            </button>
+            
+            <!-- Settings -->
+            <div class="relative group">
+                <button class="p-2 bg-white dark:bg-dark-card border dark:border-dark-border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+                <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-dark-card border dark:border-dark-border rounded-xl shadow-xl hidden group-hover:block z-50 overflow-hidden">
+                    <button @click="exportBackup" class="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                        <i data-lucide="download-cloud" class="w-4 h-4 text-indigo-500"></i> Exportar Backup (JSON)
+                    </button>
+                    <label class="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex items-center gap-2">
+                        <i data-lucide="upload-cloud" class="w-4 h-4 text-emerald-500"></i> Importar Backup
+                        <input type="file" @change="importBackup" class="hidden" accept=".json">
+                    </label>
+                </div>
+            </div>
+
+            <button @click="openAddModal" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none">
+                <i data-lucide="plus" class="w-5 h-5"></i> <span class="hidden sm:inline">Novo</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Cards de Resumo -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="bg-white dark:bg-dark-card p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-dark-border">
+            <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">Total</span>
+            <div class="text-2xl font-bold">R$ {{ formatCurrency(totalValue) }}</div>
+        </div>
+        <div class="bg-white dark:bg-dark-card p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-dark-border">
+            <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">Pendente</span>
+            <div class="text-2xl font-bold text-amber-500">R$ {{ formatCurrency(pendingValue) }}</div>
+        </div>
+        <div class="bg-white dark:bg-dark-card p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-dark-border">
+            <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">Pago</span>
+            <div class="text-2xl font-bold text-emerald-500">R$ {{ formatCurrency(paidValue) }}</div>
+        </div>
+    </div>
+
+    <!-- Lista Ordenada -->
+    <div class="space-y-3">
+        <div v-if="filteredBills.length === 0" class="text-center py-20 opacity-30">
+            <i data-lucide="inbox" class="w-16 h-16 mx-auto mb-2"></i>
+            <p>Nada para este mês.</p>
+        </div>
+
+        <div v-for="bill in filteredBills" :key="bill.id" 
+            class="bg-white dark:bg-dark-card p-4 rounded-xl border border-slate-100 dark:border-dark-border flex items-center justify-between group transition-all hover:border-indigo-400">
+            <div class="flex items-center gap-4">
+                <button @click="togglePaid(bill.id)" 
+                    :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all', isPaid(bill.id) ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 dark:border-slate-600']">
+                    <i v-if="isPaid(bill.id)" data-lucide="check" class="w-4 h-4 text-white"></i>
+                </button>
+                <div>
+                    <h3 :class="['font-semibold', isPaid(bill.id) ? 'line-through opacity-40' : '']">{{ bill.title }}</h3>
+                    <div class="flex gap-2 text-[10px] font-bold uppercase mt-1">
+                        <span class="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">Dia {{ bill.dueDay }}</span>
+                        <span class="bg-indigo-50 dark:bg-indigo-900/40 px-1.5 py-0.5 rounded text-indigo-600">{{ bill.method }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-lg">R$ {{ formatCurrency(bill.amount) }}</span>
+                <div class="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button @click="editBill(bill)" class="p-1.5 text-slate-400 hover:text-indigo-500"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                    <button @click="deleteBill(bill.id)" class="p-1.5 text-slate-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action: Export Agenda -->
+    <div class="fixed bottom-6 right-6">
+        <button @click="openExportModal" class="bg-emerald-600 text-white p-4 rounded-full shadow-2xl hover:bg-emerald-700 transition-all flex items-center gap-2 group">
+            <i data-lucide="calendar-check" class="w-6 h-6"></i>
+            <span class="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap pr-2 font-medium">Exportar Agenda</span>
+        </button>
+    </div>
+
+    <!-- Modal Export Selection -->
+    <div v-if="showExportModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl w-full max-w-md p-6 border dark:border-dark-border shadow-2xl flex flex-col max-h-[85vh]">
+            <h2 class="text-xl font-bold mb-2">Exportar para Agenda</h2>
+            <p class="text-sm text-slate-500 mb-4">Selecione as contas para gerar lembretes (.ics)</p>
+            
+            <div class="overflow-y-auto space-y-2 mb-6 no-scrollbar">
+                <div v-for="bill in bills" :key="'ex_'+bill.id" 
+                    @click="toggleExportSelection(bill.id)"
+                    :class="['p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all', selectedForExport.includes(bill.id) ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-transparent bg-slate-50 dark:bg-slate-800']">
+                    <div :class="['w-5 h-5 rounded border-2 flex items-center justify-center', selectedForExport.includes(bill.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600']">
+                        <i v-if="selectedForExport.includes(bill.id)" data-lucide="check" class="w-3 h-3 text-white"></i>
+                    </div>
+                    <span class="flex-1 font-medium">{{ bill.title }}</span>
+                    <span class="text-xs opacity-50">R$ {{ formatCurrency(bill.amount) }}</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button @click="showExportModal = false" class="flex-1 py-2 rounded-lg font-medium border dark:border-dark-border">Cancelar</button>
+                <button @click="generateCalendarFile" :disabled="selectedForExport.length === 0" class="flex-1 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50">Exportar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Modal -->
+    <div v-if="showModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl w-full max-w-md p-6 border dark:border-dark-border shadow-2xl">
+            <h2 class="text-xl font-bold mb-6">{{ editingId ? 'Editar Conta' : 'Nova Conta' }}</h2>
+            <div class="space-y-4">
+                <input v-model="form.title" type="text" placeholder="Título" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg px-4 py-2 outline-none ring-2 ring-transparent focus:ring-indigo-500">
+                <div class="grid grid-cols-2 gap-4">
+                    <input v-model.number="form.amount" type="number" step="0.01" placeholder="Valor" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg px-4 py-2 outline-none ring-2 ring-transparent focus:ring-indigo-500">
+                    <input v-model.number="form.dueDay" type="number" min="1" max="31" placeholder="Dia" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg px-4 py-2 outline-none ring-2 ring-transparent focus:ring-indigo-500">
+                </div>
+                <select v-model="form.method" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg px-4 py-2 outline-none ring-2 ring-transparent focus:ring-indigo-500">
+                    <option value="boleto">Boleto</option>
+                    <option value="pix">PIX</option>
+                    <option value="crédito">Crédito</option>
+                    <option value="débito em conta">Débito em Conta</option>
+                </select>
+                <label class="flex items-center gap-2 cursor-pointer p-2">
+                    <input v-model="form.recurring" type="checkbox" class="w-4 h-4 rounded text-indigo-600">
+                    <span class="text-sm font-medium">Conta Recorrente (Todo mês)</span>
+                </label>
+            </div>
+            <div class="flex gap-2 mt-8">
+                <button @click="showModal = false" class="flex-1 py-2 rounded-lg font-medium border dark:border-dark-border">Cancelar</button>
+                <button @click="saveBill" class="flex-1 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div v-if="toast.show" class="fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-2 bg-indigo-600 text-white rounded-full shadow-2xl z-50 text-sm font-medium animate-bounce">
+        {{ toast.message }}
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted } = Vue;
+
+const DB_NAME = 'FinPro_DB';
+const ST_BILLS = 'bills';
+const ST_PAYS = 'pays';
+
+const initDB = () => new Promise((resolve) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        db.createObjectStore(ST_BILLS, { keyPath: 'id', autoIncrement: true });
+        db.createObjectStore(ST_PAYS, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+});
+
+createApp({
+    setup() {
+        const bills = ref([]);
+        const payments = ref([]);
+        const currentMonth = ref(new Date().getMonth());
+        const currentYear = ref(new Date().getFullYear());
+        const isDark = ref(localStorage.getItem('theme') === 'dark');
+        const showModal = ref(false);
+        const showExportModal = ref(false);
+        const editingId = ref(null);
+        const selectedForExport = ref([]);
+        const toast = ref({ show: false, message: '' });
+
+        const form = ref({ title: '', amount: 0, dueDay: 1, method: 'boleto', recurring: true });
+        const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+        const filteredBills = computed(() => {
+            return bills.value.filter(b => {
+                const bDate = new Date(b.createdYear, b.createdMonth, 1);
+                const vDate = new Date(currentYear.value, currentMonth.value, 1);
+                return b.recurring ? bDate <= vDate : (b.createdMonth === currentMonth.value && b.createdYear === currentYear.value);
+            }).sort((a, b) => a.dueDay - b.dueDay);
+        });
+
+        const totalValue = computed(() => filteredBills.value.reduce((s, b) => s + b.amount, 0));
+        const paidValue = computed(() => filteredBills.value.reduce((s, b) => isPaid(b.id) ? s + b.amount : s, 0));
+        const pendingValue = computed(() => totalValue.value - paidValue.value);
+
+        const formatCurrency = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        const isPaid = (id) => payments.value.some(p => p.id === `${id}_${currentMonth.value}_${currentYear.value}`);
+
+        const load = async () => {
+            const db = await initDB();
+            const tx = db.transaction([ST_BILLS, ST_PAYS], 'readonly');
+            const bReq = tx.objectStore(ST_BILLS).getAll();
+            const pReq = tx.objectStore(ST_PAYS).getAll();
+            bReq.onsuccess = () => bills.value = bReq.result;
+            pReq.onsuccess = () => payments.value = pReq.result;
+            tx.oncomplete = () => setTimeout(() => lucide.createIcons(), 50);
+        };
+
+        const togglePaid = async (id) => {
+            const key = `${id}_${currentMonth.value}_${currentYear.value}`;
+            const db = await initDB();
+            const tx = db.transaction(ST_PAYS, 'readwrite');
+            if (isPaid(id)) tx.objectStore(ST_PAYS).delete(key);
+            else tx.objectStore(ST_PAYS).put({ id: key });
+            load();
+        };
+
+        const saveBill = async () => {
+            const db = await initDB();
+            const data = { ...form.value, createdMonth: currentMonth.value, createdYear: currentYear.value };
+            if (editingId.value) data.id = editingId.value;
+            db.transaction(ST_BILLS, 'readwrite').objectStore(ST_BILLS).put(data);
+            showModal.value = false;
+            load();
+            showToast("Conta salva!");
+        };
+
+        const deleteBill = async (id) => {
+            if (!confirm("Excluir?")) return;
+            const db = await initDB();
+            db.transaction(ST_BILLS, 'readwrite').objectStore(ST_BILLS).delete(id);
+            load();
+        };
+
+        const openAddModal = () => {
+            editingId.value = null;
+            form.value = { title: '', amount: 0, dueDay: new Date().getDate(), method: 'boleto', recurring: true };
+            showModal.value = true;
+        };
+
+        const editBill = (b) => {
+            editingId.value = b.id;
+            form.value = { ...b };
+            showModal.value = true;
+        };
+
+        const changeMonth = (d) => {
+            let m = currentMonth.value + d;
+            if (m > 11) { currentMonth.value = 0; currentYear.value++; }
+            else if (m < 0) { currentMonth.value = 11; currentYear.value--; }
+            else currentMonth.value = m;
+            load();
+        };
+
+        const toggleDarkMode = () => {
+            isDark.value = !isDark.value;
+            localStorage.setItem('theme', isDark.value ? 'dark' : 'light');
+            document.documentElement.classList.toggle('dark', isDark.value);
+            setTimeout(() => lucide.createIcons(), 50);
+        };
+
+        const showToast = (m) => {
+            toast.value = { show: true, message: m };
+            setTimeout(() => toast.value.show = false, 3000);
+        };
+
+        const exportBackup = () => {
+            const data = JSON.stringify({ bills: bills.value, pays: payments.value });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+            a.download = `backup_financas.json`;
+            a.click();
+        };
+
+        const importBackup = (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const data = JSON.parse(ev.target.result);
+                const db = await initDB();
+                const btx = db.transaction(ST_BILLS, 'readwrite');
+                data.bills.forEach(b => btx.objectStore(ST_BILLS).put(b));
+                const ptx = db.transaction(ST_PAYS, 'readwrite');
+                data.pays.forEach(p => ptx.objectStore(ST_PAYS).put(p));
+                load();
+                showToast("Backup Restaurado!");
+            };
+            reader.readAsText(file);
+        };
+
+        const openExportModal = () => {
+            selectedForExport.value = bills.value.map(b => b.id);
+            showExportModal.value = true;
+            setTimeout(() => lucide.createIcons(), 50);
+        };
+
+        const toggleExportSelection = (id) => {
+            const idx = selectedForExport.value.indexOf(id);
+            if (idx > -1) selectedForExport.value.splice(idx, 1);
+            else selectedForExport.value.push(id);
+        };
+
+        const generateCalendarFile = () => {
+            let ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//FinPro//PT-BR', 'CALSCALE:GREGORIAN'];
+            const toExp = bills.value.filter(b => selectedForExport.value.includes(b.id));
+            
+            toExp.forEach(b => {
+                for (let i = 0; i < 12; i++) {
+                    const m = (b.createdMonth + i) % 12;
+                    const y = b.createdYear + Math.floor((b.createdMonth + i) / 12);
+                    const day = Math.min(b.dueDay, new Date(y, m + 1, 0).getDate());
+                    const dt = `${y}${String(m+1).padStart(2,'0')}${String(day).padStart(2,'0')}`;
+                    
+                    ics.push('BEGIN:VEVENT');
+                    ics.push(`SUMMARY:Pagar ${b.title} (R$ ${b.amount})`);
+                    ics.push(`DTSTART;VALUE=DATE:${dt}`);
+                    ics.push(`DESCRIPTION:Vencimento via ${b.method}`);
+                    // Alertas: 3 dias, 1 dia e 0 dias
+                    [3, 1, 0].forEach(d => {
+                        ics.push('BEGIN:VALARM');
+                        ics.push(`TRIGGER:-P${d}D`);
+                        ics.push('ACTION:DISPLAY');
+                        ics.push(`DESCRIPTION:Lembrete: ${b.title}`);
+                        ics.push('END:VALARM');
+                    });
+                    ics.push('END:VEVENT');
+                    if (!b.recurring) break;
+                }
+            });
+            ics.push('END:VCALENDAR');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([ics.join('\r\n')], { type: 'text/calendar' }));
+            a.download = `agenda_contas.ics`;
+            a.click();
+            showExportModal.value = false;
+            showToast("Agenda Criada!");
+        };
+
+        onMounted(() => {
+            if (isDark.value) document.documentElement.classList.add('dark');
+            load();
+            if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+        });
+
+        return {
+            bills, payments, currentMonth, currentYear, months, isDark, showModal, showExportModal, form, editingId, selectedForExport, toast,
+            filteredBills, totalValue, paidValue, pendingValue, formatCurrency, isPaid,
+            togglePaid, saveBill, deleteBill, openAddModal, editBill, changeMonth, toggleDarkMode,
+            exportBackup, importBackup, openExportModal, toggleExportSelection, generateCalendarFile
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
